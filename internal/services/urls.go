@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 )
 
@@ -22,12 +21,8 @@ type UrlResponseStruct struct {
 
 func ProcessUrls(ctx context.Context, urls []string) (map[string]interface{}, error) {
 	var (
-		/**
-			Default map can be used
-			Because no concurrency jobs, only sequential write
-		*/
-		syncMap = sync.Map{}
 		cancelChan = make(chan struct{})
+		processed = make(map[string]interface{}, len(urls))
 		results = make(chan UrlResponseStruct, len(urls))
 		jobs = make(chan string, len(urls))
 	)
@@ -44,19 +39,10 @@ func ProcessUrls(ctx context.Context, urls []string) (map[string]interface{}, er
 			cancelChan <- struct{}{}
 			return nil, result.err
 		}
-		syncMap.Store(result.url, result.data)
+		processed[result.url] = result.data
 	}
 
-
-	var result = make(map[string]interface{}, len(urls))
-
-	syncMap.Range(func(key, value interface{}) bool {
-		result[key.(string)] = value
-		return true
-	})
-
-
-	return result, nil
+	return processed, nil
 }
 
 func urlProcess(ctx context.Context, url string) UrlResponseStruct {
