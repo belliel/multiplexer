@@ -6,6 +6,7 @@ import (
 	"github.com/belliel/multiplexer/internal/transport"
 	"github.com/belliel/multiplexer/pkg/os"
 	"log"
+	"net/http"
 )
 
 func main() {
@@ -20,9 +21,10 @@ func main() {
 	server := transport.NewTransportBuilder(mainCtx, transport.HTTP).
 		WithAddr(config.ListenAddr).
 		WithDebug(config.Debug).
+		WithConnectionsLimit(config.ConnectionsLimit).
 		Build()
 
-	if err := server.Listen(); err != nil && err.Error() != "http: Server closed" {
+	if err := server.Listen(); err != nil && err != http.ErrServerClosed {
 		log.Printf("[ERROR] Server cannot serve: %v", err)
 		return
 	}

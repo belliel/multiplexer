@@ -2,6 +2,7 @@ package configs
 
 import (
 	"os"
+	"strconv"
 	"sync"
 )
 
@@ -13,6 +14,7 @@ const (
 type Config struct {
 	ListenAddr string
 	Debug      bool
+	ConnectionsLimit int32
 }
 
 var conf *Config
@@ -31,6 +33,11 @@ func NewAppConfig() *Config {
 
 		if debug, exists := os.LookupEnv("DEBUG"); exists && len(debug) != 0 { // might be DEBUG=
 			conf.Debug = debug != "FALSE"
+		}
+
+		if limit, exists := os.LookupEnv("CONNECTIONS_LIMIT"); exists {
+			lim, _ := strconv.ParseInt(limit, 10, 32)
+			conf.ConnectionsLimit = int32(lim)
 		}
 	})
 	return conf

@@ -2,52 +2,65 @@ package services
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 )
 
 const (
-	httpRequestTimeout = time.Second
+	httpRequestTimeout = 1 * time.Second
 )
 
 const MaxWorkers = 4
 
 type UrlResponseStruct struct {
 	data interface{}
-	url string
-	err error
+	url  string
+	err  error
 }
 
-func ProcessUrls(ctx context.Context, urls []string) (map[string]interface{}, error) {
+func ProcessUrls(ctx context.Context, urls []string) ([]map[string]interface{}, error) {
 	var (
 		cancelChan = make(chan struct{})
-		processed = make(map[string]interface{}, len(urls))
-		results = make(chan UrlResponseStruct, len(urls))
-		jobs = make(chan string, len(urls))
+		processed  = make([]map[string]interface{}, 0, len(urls))
+		results    = make(chan UrlResponseStruct)
+		jobs       = make(chan string, len(urls))
+		counter    = 0
 	)
 
 	for w := 0; w < MaxWorkers; w++ {
 		go urlWorker(ctx, jobs, results, cancelChan)
 	}
-	for j := 0; j <= len(urls); j++ {
+	for j := 0; j < len(urls); j++ {
 		jobs <- urls[j]
 	}
 
-	for result := range results {
-		if result.err != nil {
-			cancelChan <- struct{}{}
-			return nil, result.err
+	for counter < len(urls) {
+		select {
+		case result := <-results:
+			if result.err != nil {
+				go func() { cancelChan <- struct{}{} }()
+				return nil, result.err
+			}
+			processed = append(processed, map[string]interface{}{
+				"counter": counter,
+				"url":     result.url,
+				"data":    result.data,
+			})
+			counter++
 		}
-		processed[result.url] = result.data
 	}
-
+	cancelChan <- struct{}{}
 	return processed, nil
 }
 
 func urlProcess(ctx context.Context, url string) UrlResponseStruct {
-	result := UrlResponseStruct{}
-	
+	result := UrlResponseStruct{
+		url: url,
+	}
+
 	client := &http.Client{}
 
 	requestContext, cancel := context.WithTimeout(ctx, httpRequestTimeout)
@@ -63,7 +76,7 @@ func urlProcess(ctx context.Context, url string) UrlResponseStruct {
 	response, err := client.Do(req)
 	select {
 	case <-requestContext.Done():
-		result.err = ctx.Err()
+		result.err = requestContext.Err()
 		return result
 	default:
 		break
@@ -75,10 +88,11 @@ func urlProcess(ctx context.Context, url string) UrlResponseStruct {
 	}
 	defer response.Body.Close()
 
-
 	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
 		result.data, result.err = io.ReadAll(response.Body)
 		result.data = string(result.data.([]byte))
+	} else {
+		result.err = errors.New(response.Status)
 	}
 
 	client.CloseIdleConnections()
@@ -86,13 +100,15 @@ func urlProcess(ctx context.Context, url string) UrlResponseStruct {
 	return result
 }
 
-func urlWorker(ctx context.Context, jobs <- chan string, results chan <- UrlResponseStruct, cancelChan <- chan struct{})  {
+func urlWorker(ctx context.Context, jobs <-chan string, results chan<- UrlResponseStruct, cancelChan <-chan struct{}) {
 	for {
 		select {
-		case <- cancelChan:
+		case <-ctx.Done():
 			return
-		case j := <- jobs:
-			results <- urlProcess(ctx, j)
+		case <-cancelChan:
+			return
+		case j := <-jobs:
+			results <- urlProcess(ctx, j+"?q="+strconv.Itoa(int(time.Now().Unix())))
 		}
 	}
 }

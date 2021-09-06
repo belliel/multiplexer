@@ -31,19 +31,21 @@ type Transport struct {
 }
 
 type Builder struct {
-	mainCtx       context.Context
-	transportType TransportType
-	transport     *Transporter
-	addr          string
-	debug         bool
+	mainCtx          context.Context
+	transportType    TransportType
+	transport        *Transporter
+	addr             string
+	debug            bool
+	connectionsLimit int32
 }
 
 func NewTransportBuilder(ctx context.Context, transportType TransportType) *Builder {
 	return &Builder{
-		mainCtx:       ctx,
-		transportType: transportType,
-		addr:          defaultAddr,
-		debug:         defaultDebug,
+		mainCtx:          ctx,
+		transportType:    transportType,
+		addr:             defaultAddr,
+		debug:            defaultDebug,
+		connectionsLimit: 0,
 	}
 }
 
@@ -57,10 +59,15 @@ func (b *Builder) WithDebug(debug bool) *Builder {
 	return b
 }
 
+func (b *Builder) WithConnectionsLimit(limit int32) *Builder {
+	b.connectionsLimit = limit
+	return b
+}
+
 func (b *Builder) Build() Transporter {
 	switch b.transportType {
 	case HTTP:
-		return http.NewServer(b.mainCtx, b.debug, b.addr)
+		return http.NewServer(b.mainCtx, b.debug, b.addr, b.connectionsLimit)
 	default:
 		panic("Transport type is not implemented")
 	}
