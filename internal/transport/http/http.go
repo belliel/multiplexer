@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"github.com/belliel/multiplexer/internal/transport/http/api"
 	"log"
 	"net/http"
 	"time"
@@ -24,9 +25,9 @@ type Server struct {
 
 func NewServer(ctx context.Context, debug bool, addr string) *Server {
 	server := &Server{
-		masterCtx: ctx,
-		addr:      addr,
-		debug:     debug,
+		masterCtx:         ctx,
+		addr:              addr,
+		debug:             debug,
 		idleConnectionsCh: make(chan struct{}),
 		instance: &http.Server{
 			Addr:         defaultAddr,
@@ -39,7 +40,17 @@ func NewServer(ctx context.Context, debug bool, addr string) *Server {
 		server.instance.Addr = addr
 	}
 
+	server.getHandlers()
+
 	return server
+}
+
+func (s *Server) getHandlers() {
+	mux := http.DefaultServeMux
+
+	mux.HandleFunc("/process/urls", api.ProcessUrls)
+
+	s.instance.Handler = mux
 }
 
 func (s *Server) Listen() error {
