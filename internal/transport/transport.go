@@ -2,7 +2,12 @@ package transport
 
 import (
 	"context"
-	"strconv"
+	"github.com/belliel/multiplexer/internal/transport/http"
+)
+
+const (
+	defaultAddr  = ":8080"
+	defaultDebug = true
 )
 
 type TransportType int
@@ -13,8 +18,10 @@ const (
 )
 
 type Transporter interface {
-	Listen()
-	Shutdown()
+	Listen() error
+	ListenCtxForGracefulShutdown()
+	Shutdown(ctx context.Context) error
+	WaitForGracefulShutdown()
 }
 
 type Transport struct {
@@ -27,7 +34,7 @@ type Builder struct {
 	mainCtx       context.Context
 	transportType TransportType
 	transport     *Transporter
-	port          string
+	addr          string
 	debug         bool
 }
 
@@ -35,13 +42,13 @@ func NewTransportBuilder(ctx context.Context, transportType TransportType) *Buil
 	return &Builder{
 		mainCtx:       ctx,
 		transportType: transportType,
-		port:          "3000",
-		debug:         true,
+		addr:          defaultAddr,
+		debug:         defaultDebug,
 	}
 }
 
-func (b *Builder) WithPort(port string) *Builder {
-	b.port = port
+func (b *Builder) WithAddr(addr string) *Builder {
+	b.addr = addr
 	return b
 }
 
@@ -50,9 +57,11 @@ func (b *Builder) WithDebug(debug bool) *Builder {
 	return b
 }
 
-func (b *Builder) Build() *Transporter {
+func (b *Builder) Build() Transporter {
 	switch b.transportType {
 	case HTTP:
-		return NewHttpServer{}
+		return http.NewServer(b.mainCtx, b.debug, b.addr)
+	default:
+		panic("Transport type is not implemented")
 	}
 }
