@@ -12,8 +12,8 @@ const (
 )
 
 type Config struct {
-	ListenAddr string
-	Debug      bool
+	ListenAddr       string
+	Debug            bool
 	ConnectionsLimit int32
 }
 
