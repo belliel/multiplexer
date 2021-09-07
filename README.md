@@ -3,7 +3,7 @@
 
 ---
 ```
-Enviroment variables
+Environment variables
 
 LISTEN_ADDR=:8080
 DEBUG=true // not implemented :|
