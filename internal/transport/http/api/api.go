@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/belliel/multiplexer/internal/services"
@@ -83,17 +82,7 @@ func ProcessUrls(w http.ResponseWriter, r *http.Request) {
 	result, err := services.ProcessUrls(r.Context(), urlsToProcessData.Urls)
 
 	if err != nil {
-		errorMessage := ""
-		status := http.StatusInternalServerError
-		switch {
-		case err == context.DeadlineExceeded:
-			errorMessage = "request timeout"
-			status = http.StatusRequestTimeout
-		default:
-			errorMessage = err.Error()
-		}
-
-		http.Error(w, errorMessage, status)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 

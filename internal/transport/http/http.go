@@ -3,11 +3,10 @@ package http
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/belliel/multiplexer/internal/transport/http/api"
 	"log"
 	"net/http"
-	"sync"
+	"strconv"
 	"sync/atomic"
 	"time"
 )
@@ -17,7 +16,7 @@ const (
 	readTimeout               = 5 * time.Second
 	writeTimeout              = 30 * time.Second
 	idleConnectionTimeout     = 3 * time.Second
-	defaultMaxConnectionLimit = 100
+	defaultMaxConnectionLimit = 0
 )
 
 type Server struct {
@@ -59,25 +58,15 @@ func NewServer(ctx context.Context, debug bool, addr string, connectionLimit int
 }
 
 func (s *Server) throttleMiddleware(handler http.Handler) http.Handler {
-	once := &sync.Once{}
-	once.Do(func() {
-		go func() {
-			for {
-				time.Sleep(1 * time.Second)
-				fmt.Println(s.connections)
-			}
-		}()
-	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		if s.connectionsLimit == 0 || atomic.LoadInt32(&s.connections) < s.connectionsLimit {
+		activeConnectionsCount := atomic.LoadInt32(&s.connections)
+		if s.connectionsLimit == 0 || activeConnectionsCount <= s.connectionsLimit {
 			atomic.AddInt32(&s.connections, 1)
 			handler.ServeHTTP(w, r)
 			atomic.AddInt32(&s.connections, -1)
-			_ = ""
 		} else {
 			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte("connections limit exceeded"))
+			w.Write([]byte("connections limit exceeded, your is: " + strconv.Itoa(int(activeConnectionsCount))))
 		}
 	})
 }
@@ -124,12 +113,14 @@ func (s *Server) loggerMiddleware(handler http.Handler) http.Handler {
 }
 
 func (s *Server) getHandlers() {
-	mux := http.DefaultServeMux
+	mux := http.NewServeMux()
 
-	mux.HandleFunc("/process/urls", api.ProcessUrls)
+	mux.Handle("/process/urls", s.throttleMiddleware(http.HandlerFunc(api.ProcessUrls)))
+	mux.HandleFunc("/process", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Testify"))
+	})
 
 	middlewares := []func(http.Handler) http.Handler{
-		s.throttleMiddleware,
 		s.loggerMiddleware,
 		s.recoverMiddleware,
 	}

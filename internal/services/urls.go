@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -16,9 +15,10 @@ const (
 const MaxWorkers = 4
 
 type UrlResponseStruct struct {
-	data interface{}
-	url  string
-	err  error
+	data        interface{}
+	contentType string
+	url         string
+	err         error
 }
 
 func ProcessUrls(ctx context.Context, urls []string) ([]map[string]interface{}, error) {
@@ -33,6 +33,7 @@ func ProcessUrls(ctx context.Context, urls []string) ([]map[string]interface{}, 
 	for w := 0; w < MaxWorkers; w++ {
 		go urlWorker(ctx, jobs, results, cancelChan)
 	}
+
 	for j := 0; j < len(urls); j++ {
 		jobs <- urls[j]
 	}
@@ -45,9 +46,10 @@ func ProcessUrls(ctx context.Context, urls []string) ([]map[string]interface{}, 
 				return nil, result.err
 			}
 			processed = append(processed, map[string]interface{}{
-				"counter": counter,
-				"url":     result.url,
-				"data":    result.data,
+				"counter":      counter,
+				"content_type": result.contentType,
+				"url":          result.url,
+				"data":         result.data,
 			})
 			counter++
 		}
@@ -76,7 +78,7 @@ func urlProcess(ctx context.Context, url string) UrlResponseStruct {
 	response, err := client.Do(req)
 	select {
 	case <-requestContext.Done():
-		result.err = requestContext.Err()
+		result.err = errors.New(url + ` ` + requestContext.Err().Error())
 		return result
 	default:
 		break
@@ -91,8 +93,9 @@ func urlProcess(ctx context.Context, url string) UrlResponseStruct {
 	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
 		result.data, result.err = io.ReadAll(response.Body)
 		result.data = string(result.data.([]byte))
+		result.contentType = response.Header.Get("Content-Type")
 	} else {
-		result.err = errors.New(response.Status)
+		result.err = errors.New(url + ` ` + response.Status)
 	}
 
 	client.CloseIdleConnections()
@@ -108,7 +111,7 @@ func urlWorker(ctx context.Context, jobs <-chan string, results chan<- UrlRespon
 		case <-cancelChan:
 			return
 		case j := <-jobs:
-			results <- urlProcess(ctx, j+"?q="+strconv.Itoa(int(time.Now().Unix())))
+			results <- urlProcess(ctx, j)
 		}
 	}
 }

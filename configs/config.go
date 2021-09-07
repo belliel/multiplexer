@@ -3,12 +3,14 @@ package configs
 import (
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 )
 
 const (
-	defaultAddr  = ":8080"
-	defaultDebug = true
+	defaultAddr             = ":8080"
+	defaultDebug            = true
+	defaultConnectionsLimit = 100
 )
 
 type Config struct {
@@ -23,8 +25,9 @@ func NewAppConfig() *Config {
 	once := sync.Once{}
 	once.Do(func() {
 		conf = &Config{
-			ListenAddr: defaultAddr,
-			Debug:      defaultDebug,
+			ListenAddr:       defaultAddr,
+			Debug:            defaultDebug,
+			ConnectionsLimit: defaultConnectionsLimit,
 		}
 
 		if addr, exists := os.LookupEnv("LISTEN_ADDR"); exists {
@@ -32,7 +35,7 @@ func NewAppConfig() *Config {
 		}
 
 		if debug, exists := os.LookupEnv("DEBUG"); exists && len(debug) != 0 { // might be DEBUG=
-			conf.Debug = debug != "FALSE"
+			conf.Debug = strings.ToUpper(debug) != "FALSE"
 		}
 
 		if limit, exists := os.LookupEnv("CONNECTIONS_LIMIT"); exists {
