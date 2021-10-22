@@ -59,14 +59,13 @@ func NewServer(ctx context.Context, debug bool, addr string, connectionLimit int
 
 func (s *Server) throttleMiddleware(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		activeConnectionsCount := atomic.LoadInt32(&s.connections)
-		if s.connectionsLimit == 0 || activeConnectionsCount <= s.connectionsLimit {
+		if s.connectionsLimit == 0 || atomic.LoadInt32(&s.connections) <= s.connectionsLimit {
 			atomic.AddInt32(&s.connections, 1)
 			handler.ServeHTTP(w, r)
 			atomic.AddInt32(&s.connections, -1)
 		} else {
 			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte("connections limit exceeded, your is: " + strconv.Itoa(int(activeConnectionsCount))))
+			w.Write([]byte("connections limit exceeded, your is: " + strconv.Itoa(int(atomic.LoadInt32(&s.connections)))))
 		}
 	})
 }
